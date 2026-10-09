@@ -6,3 +6,8 @@ src-tauri/gen/
 *.log
 .DS_Store
 Thumbs.db
+# local git helper scripts/logs (machine-specific absolute paths)
+git_fetch.txt
+git_sync.txt
+scripts/git_fetch.ps1
+scripts/git_sync.ps1

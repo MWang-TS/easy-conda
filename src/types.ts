@@ -1,5 +1,7 @@
 export interface CondaInstance {
   id: string;
+  /** 运行目标：`windows` 或 `wsl:<distro>` */
+  runtime: string;
   executablePath: string;
   kind: 'conda' | 'mamba' | 'micromamba';
   version: string;
@@ -13,6 +15,8 @@ export interface EnvironmentSummary {
   name: string | null;
   prefix: string;
   isBase: boolean;
+  /** 是否为当前激活的环境 */
+  isActive: boolean;
   pythonVersion: string | null;
   packageCount: number | null;
   platform: string | null;
@@ -40,14 +44,103 @@ export interface SearchResult {
   channel: string;
 }
 
-export interface OperationRecord {
+export type JobStatus =
+  | 'queued'
+  | 'running'
+  | 'cancel_requested'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
+
+export interface JobSnapshot {
   id: number;
   kind: string;
   target: string;
-  status: 'running' | 'succeeded' | 'failed';
+  status: JobStatus | string;
   summary: string;
-  startedAt: number;
+  error: string | null;
+  environmentPrefix: string | null;
+  stage: string | null;
+  createdAt: number;
+  startedAt: number | null;
   finishedAt: number | null;
+  log: string[];
+}
+
+export interface JobEvent {
+  id: number;
+  kind: string;
+  target: string;
+  status: string;
+  summary: string;
+  error: string | null;
+  environmentPrefix: string | null;
+  stage: string | null;
+  createdAt: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+  logLine: string | null;
+}
+
+export interface PlanChange {
+  action: string;
+  name: string;
+  fromVersion: string | null;
+  toVersion: string | null;
+  channel: string | null;
+}
+
+export interface PlanDownload {
+  name: string;
+  version: string | null;
+  channel: string | null;
+  size: number | null;
+}
+
+export interface OperationPlan {
+  supported: boolean;
+  command: string | null;
+  changes: PlanChange[];
+  downloads: PlanDownload[];
+  warnings: string[];
+  fetchBytes: number | null;
+}
+
+export interface YamlPreview {
+  parsed: boolean;
+  name: string | null;
+  channels: string[];
+  dependencies: string[];
+  error: string | null;
+}
+
+export interface DiagnosticSection {
+  title: string;
+  content: string;
+}
+
+export interface DiagnosticReport {
+  generatedAt: number;
+  redacted: boolean;
+  sections: DiagnosticSection[];
+}
+
+export interface InstallSource {
+  id: string;
+  label: string;
+  downloadUrl: string;
+  recommended: boolean;
+}
+
+export interface InstallInfo {
+  name: string;
+  version: string;
+  arch: string;
+  filename: string;
+  license: string;
+  description: string;
+  sources: InstallSource[];
 }
 
 export interface ChannelInfo {
