@@ -1,9 +1,18 @@
 use crate::lock_poison;
 use crate::models::*;
 use crate::{archive, conda, diagnostics, jobs, AppState};
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State};
+
+/// 在 Windows 上为新进程附加 CREATE_NEW_CONSOLE，使其在独立窗口运行；其它平台为 no-op。
+#[cfg(target_os = "windows")]
+fn with_new_console(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x0000_0010);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn with_new_console(_command: &mut std::process::Command) {}
 
 fn find_instance(state: &AppState, id: &str) -> Result<CondaInstance, AppError> {
     let instances = lock_poison(&state.instances);
@@ -1020,24 +1029,27 @@ pub async fn open_environment_terminal(
             "source \"{}/etc/profile.d/conda.sh\" 2>/dev/null || true; conda activate \"{}\"; exec bash",
             instance.root_prefix, activate_name
         );
-        std::process::Command::new("wsl.exe")
-            .args(["-d", distro, "--", "bash", "-lc", &script])
-            .creation_flags(0x0000_0010) // CREATE_NEW_CONSOLE
+        let mut command = std::process::Command::new("wsl.exe");
+        command.args(["-d", distro, "--", "bash", "-lc", &script]);
+        with_new_console(&mut command);
+        command
             .spawn()
             .map_err(|error| format!("无法打开 WSL 终端: {error}"))?;
         return Ok(());
     }
 
-    let hook = PathBuf::from(&instance.root_prefix)
+    open_local_terminal(&instance.root_prefix, &activate_name)
+}
+
+/// 在 Windows 上打开本机环境的终端（PowerShell + conda-hook）。
+#[cfg(target_os = "windows")]
+fn open_local_terminal(root_prefix: &str, activate_name: &str) -> Result<(), String> {
+    let hook = PathBuf::from(root_prefix)
         .join("shell")
         .join("condabin")
         .join("conda-hook.ps1");
     let script = if hook.exists() {
-        format!(
-            "& '{}'; conda activate '{}'",
-            hook.display(),
-            activate_name
-        )
+        format!("& '{}'; conda activate '{}'", hook.display(), activate_name)
     } else {
         format!("conda activate '{}'", activate_name)
     };
@@ -1045,9 +1057,8 @@ pub async fn open_environment_terminal(
         .map(PathBuf::from)
         .filter(|path| path.is_dir());
     let mut command = std::process::Command::new("powershell.exe");
-    command
-        .args(["-NoExit", "-ExecutionPolicy", "Bypass", "-Command", &script])
-        .creation_flags(0x0000_0010); // CREATE_NEW_CONSOLE
+    command.args(["-NoExit", "-ExecutionPolicy", "Bypass", "-Command", &script]);
+    with_new_console(&mut command);
     if let Some(home) = home_dir {
         command.current_dir(home);
     }
@@ -1057,7 +1068,35 @@ pub async fn open_environment_terminal(
     Ok(())
 }
 
-/// 在 Windows 资源管理器中打开环境目录。
+/// 在 macOS 上打开本机环境的终端（Terminal.app）。
+#[cfg(target_os = "macos")]
+fn open_local_terminal(root_prefix: &str, activate_name: &str) -> Result<(), String> {
+    let script = format!(
+        "source \"{}/etc/profile.d/conda.sh\" 2>/dev/null || true; conda activate \"{}\"; exec bash",
+        root_prefix, activate_name
+    );
+    std::process::Command::new("osascript")
+        .args(["-e", &format!("tell application \"Terminal\" to do script \"{}\"", script)])
+        .spawn()
+        .map_err(|error| format!("无法打开终端: {error}"))?;
+    Ok(())
+}
+
+/// 在 Linux 上打开本机环境的终端（x-terminal-emulator）。
+#[cfg(all(unix, not(target_os = "macos")))]
+fn open_local_terminal(root_prefix: &str, activate_name: &str) -> Result<(), String> {
+    let script = format!(
+        "source \"{}/etc/profile.d/conda.sh\" 2>/dev/null || true; conda activate \"{}\"; exec bash",
+        root_prefix, activate_name
+    );
+    std::process::Command::new("x-terminal-emulator")
+        .args(["-e", "bash", "-lc", &script])
+        .spawn()
+        .map_err(|error| format!("无法打开终端: {error}"))?;
+    Ok(())
+}
+
+/// 在文件管理器中打开环境目录。
 #[tauri::command]
 pub async fn open_environment_directory(
     instance_id: String,
@@ -1070,8 +1109,31 @@ pub async fn open_environment_directory(
     if !target.is_dir() {
         return Err("环境目录不存在或不可访问".to_string());
     }
+    open_in_file_manager(&target)
+}
+
+#[cfg(target_os = "windows")]
+fn open_in_file_manager(target: &Path) -> Result<(), String> {
     std::process::Command::new("explorer.exe")
         .arg(target.to_string_lossy().into_owned())
+        .spawn()
+        .map_err(|error| format!("无法打开目录: {error}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn open_in_file_manager(target: &Path) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(target)
+        .spawn()
+        .map_err(|error| format!("无法打开目录: {error}"))?;
+    Ok(())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn open_in_file_manager(target: &Path) -> Result<(), String> {
+    std::process::Command::new("xdg-open")
+        .arg(target)
         .spawn()
         .map_err(|error| format!("无法打开目录: {error}"))?;
     Ok(())
