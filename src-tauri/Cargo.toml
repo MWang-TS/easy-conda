@@ -1,6 +1,6 @@
 [package]
 name = "easy-conda"
-version = "1.0.0"
+version = "1.0.1"
 description = "A desktop manager for Conda environments"
 authors = ["Easy Conda"]
 edition = "2021"

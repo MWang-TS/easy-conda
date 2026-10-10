@@ -42,7 +42,7 @@ const VIEW_META: Record<View, { label: string; icon: typeof Box }> = {
 const PRIMARY_NAV: View[] = ['environments', 'packages'];
 const SECONDARY_NAV: View[] = ['settings', 'install', 'help', 'tasks'];
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 
 const OPERATION_LABEL: Record<string, string> = {
   create_environment: '创建环境',
