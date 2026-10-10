@@ -377,8 +377,11 @@ pub async fn execute_process(
         return;
     };
 
-    let mut child = match tokio::process::Command::new(program)
-        .args(args)
+    let mut command = tokio::process::Command::new(program);
+    command.args(args);
+    #[cfg(target_os = "windows")]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW：后台任务不弹控制台窗口
+    let mut child = match command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

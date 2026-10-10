@@ -5,16 +5,33 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 
+/// 抑制子进程的控制台窗口（仅 Windows 有效）。
+///
+/// 本应用是 GUI 程序（`windows_subsystem = "windows"`，自身无控制台）。当它用
+/// `std::process::Command` 启动 `conda.exe` / `wsl.exe` / `python.exe` 等控制台
+/// 子进程时，Windows 默认会为每个子进程新开一个控制台窗口。设置 `CREATE_NO_WINDOW`
+/// 可让它们在后台无窗口运行（stdio 仍可被管道捕获）。
+#[cfg(target_os = "windows")]
+pub fn no_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn no_console_window(_command: &mut Command) {}
+
 /// 根据实例的运行目标（Windows 或 WSL 发行版）构建 conda 子进程。
 /// 参数以独立 argv 传入，不经 shell 拼接。
 fn build_command(instance: &CondaInstance) -> Command {
-    if let Some(distro) = instance.wsl_distro() {
+    let mut command = if let Some(distro) = instance.wsl_distro() {
         let mut command = Command::new("wsl.exe");
         command.arg("-d").arg(distro).arg("--").arg(&instance.executable_path);
         command
     } else {
         Command::new(&instance.executable_path)
-    }
+    };
+    no_console_window(&mut command);
+    command
 }
 
 /// 构建完整 argv（程序 + 参数），供异步任务系统直接执行。
@@ -144,8 +161,10 @@ pub fn probe(path: &Path) -> Result<CondaInstance, AppError> {
 
 /// 从 Windows 侧指定路径运行 `conda info --json`（仅用于发现阶段的裸路径探测）。
 fn run_json_from_path(executable: &Path, args: &[&str]) -> Result<serde_json::Value, AppError> {
-    let output = Command::new(executable)
-        .args(args)
+    let mut command = Command::new(executable);
+    command.args(args);
+    no_console_window(&mut command);
+    let output = command
         .output()
         .map_err(|error| AppError::Command(format!("{}: {error}", executable.display())))?;
     parse_output(output)
@@ -226,7 +245,10 @@ fn decode_utf16le(bytes: &[u8]) -> String {
 
 /// 解析 `wsl.exe --list --verbose` 输出，返回发行版名列表（去掉 `*` 默认标记）。
 pub fn list_wsl_distros() -> Vec<String> {
-    let Ok(output) = Command::new("wsl.exe").args(["--list", "--verbose"]).output() else {
+    let mut command = Command::new("wsl.exe");
+    command.args(["--list", "--verbose"]);
+    no_console_window(&mut command);
+    let Ok(output) = command.output() else {
         return Vec::new();
     };
     let text = decode_wsl_output(&output.stdout);
@@ -263,10 +285,10 @@ for p in "\$HOME/miniconda3/bin/conda" "\$HOME/anaconda3/bin/conda" "\$HOME/mini
 done
 command -v conda 2>/dev/null
 "#;
-    let output = Command::new("wsl.exe")
-        .args(["-d", distro, "--", "bash", "-lc", script])
-        .output()
-        .ok()?;
+    let mut command = Command::new("wsl.exe");
+    command.args(["-d", distro, "--", "bash", "-lc", script]);
+    no_console_window(&mut command);
+    let output = command.output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -280,8 +302,10 @@ command -v conda 2>/dev/null
 /// 探测 WSL 发行版内的 conda 并构造实例（runtime 为 `wsl:<distro>`）。
 pub fn probe_wsl(distro: &str, conda_path: &str) -> Result<CondaInstance, AppError> {
     let script = format!("{} info --json", conda_path);
-    let output = Command::new("wsl.exe")
-        .args(["-d", distro, "--", "bash", "-lc", &script])
+    let mut command = Command::new("wsl.exe");
+    command.args(["-d", distro, "--", "bash", "-lc", &script]);
+    no_console_window(&mut command);
+    let output = command
         .output()
         .map_err(|error| AppError::Command(format!("wsl {distro}: {error}")))?;
     let json = parse_output(output)?;

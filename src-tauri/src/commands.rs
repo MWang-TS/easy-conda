@@ -930,8 +930,10 @@ pub async fn build_wheelhouse(
     let req = tauri::async_runtime::spawn_blocking({
         let python = python.clone();
         move || {
-            let output = std::process::Command::new(&python)
-                .args(["-m", "pip", "freeze"])
+            let mut command = std::process::Command::new(&python);
+            command.args(["-m", "pip", "freeze"]);
+            conda::no_console_window(&mut command);
+            let output = command
                 .output()
                 .map_err(|error| error.to_string())?;
             Ok::<String, String>(String::from_utf8_lossy(&output.stdout).into_owned())
