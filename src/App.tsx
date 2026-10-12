@@ -246,16 +246,16 @@ function CreateEnvironmentDialog({ instanceId, onClose, onCreated }: {
             <button className="icon-button" onClick={onClose} aria-label="关闭"><X size={17} /></button>
           </div>
           <div className="dialog-fields">
-            <label>环境名称
+            <label><span className="field-label">环境名称</span>
               <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：my-project" />
             </label>
             <div className="field-row">
-              <label>Python 版本
+              <label><span className="field-label">Python 版本</span>
                 <select value={pythonVersion} onChange={(event) => setPythonVersion(event.target.value)}>
                   <option>3.12</option><option>3.11</option><option>3.10</option><option>3.9</option>
                 </select>
               </label>
-              <label>下载源 <span className="optional-label">可选</span>
+              <label><span className="field-label">下载源 <span className="optional-label">可选</span></span>
                 <select value={channel} onChange={(event) => setChannel(event.target.value)}>
                   <option value="">使用当前配置</option>
                   <option value="conda-forge">conda-forge</option>
@@ -263,7 +263,7 @@ function CreateEnvironmentDialog({ instanceId, onClose, onCreated }: {
                 </select>
               </label>
             </div>
-            <label>初始依赖 <span className="optional-label">可选</span>
+            <label><span className="field-label">初始依赖 <span className="optional-label">可选</span></span>
               <input value={packagesText} onChange={(event) => setPackagesText(event.target.value)} placeholder="输入包名，以空格分隔" />
             </label>
             {error && <div className="dialog-error"><AlertCircle size={15} />{error}</div>}
@@ -364,7 +364,7 @@ function ImportDialog({ instanceId, onClose, onImported }: {
             </div>
           )}
           {preview && !preview.parsed && <div className="dialog-error"><AlertCircle size={15} />{preview.error}</div>}
-          <label>目标环境名 <span className="optional-label">可选</span>
+          <label><span className="field-label">目标环境名 <span className="optional-label">可选</span></span>
             <input value={targetName} onChange={(event) => setTargetName(event.target.value)} placeholder="留空则使用 YAML 中的名称" />
           </label>
           {error && <div className="dialog-error"><AlertCircle size={15} />{error}</div>}
@@ -1495,7 +1495,7 @@ export default function App() {
                       {loading ? <tr><td colSpan={6} className="table-state"><LoaderCircle className="spin" size={19} />正在读取环境…</td></tr> : visibleEnvironments.map((environment) => (
                         <tr key={`${environment.instanceId}:${environment.prefix}`} className={selected?.prefix === environment.prefix ? 'selected' : ''} onClick={() => setSelected(environment)}>
                           <td><div className="environment-name"><div className={`env-icon ${environment.isBase ? 'env-base' : ''}`}>{environment.isBase ? <Command size={15} /> : <Box size={15} />}</div><div><strong>{environment.name ?? '未命名环境'}</strong><span>{environment.isBase ? '基础环境' : 'Conda 环境'}</span></div>{environment.isBase && <span className="base-tag">BASE</span>}</div></td>
-                          <td><span className="python-tag">{environment.pythonVersion ? `Python ${environment.pythonVersion}` : '—'}</span></td>
+                          <td><span className="python-tag" title={environment.pythonVersion ? `Python ${environment.pythonVersion}` : undefined}>{environment.pythonVersion ?? '—'}</span></td>
                           <td className="package-count">{environment.packageCount ?? '—'} <span>个</span></td>
                           <td className="package-count size-cell">{formatBytes(environment.sizeBytes)}</td>
                           <td>{environment.isActive ? <span className="env-state active"><i />已激活</span> : <span className="env-state">未激活</span>}</td>
